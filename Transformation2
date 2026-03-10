@@ -1,0 +1,73 @@
+import psycopg
+
+HOST = "localhost"
+PORT = 2005
+USER = "postgres"
+PASSWORD = "xxxx"
+TARGET_DB = "DWH"
+
+
+def transform_crm_cust_info():
+    conn = psycopg.connect(
+        host=HOST,
+        port=PORT,
+        dbname=TARGET_DB,
+        user=USER,
+        password=PASSWORD
+    )
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM transformation.crm_cust_info;")
+
+            cur.execute("""
+                INSERT INTO transformation.crm_cust_info (
+                    cst_id,
+                    cst_key,
+                    cst_firstname,
+                    cst_lastname,
+                    cst_marital_status,
+                    cst_gndr,
+                    cst_create_date
+                )
+                SELECT
+                    cst_id,
+                    cst_key,
+                    cst_firstname,
+                    cst_lastname,
+                    cst_marital_status,
+                    cst_gndr,
+                    cst_create_date::text
+                FROM (
+                    SELECT *,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY cst_id
+                               ORDER BY cst_create_date
+                           ) AS row_num,
+                           COUNT(*) OVER (
+                               PARTITION BY cst_id
+                           ) AS total_rows
+                    FROM ingestion.crm_cust_info
+                    WHERE cst_id IS NOT NULL
+                ) AS filtered_data
+                WHERE row_num = total_rows;
+            """)
+
+        conn.commit()
+        print("crm_cust_info transformed successfully")
+
+    except Exception as e:
+        conn.rollback()
+        print("Error while transforming crm_cust_info:")
+        print(e)
+
+    finally:
+        conn.close()
+
+
+def main():
+    transform_crm_cust_info()
+
+
+if __name__ == "__main__":
+    main()
