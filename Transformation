@@ -1,0 +1,129 @@
+import psycopg
+from psycopg import sql
+
+HOST = "localhost"
+PORT = 2005
+USER = "postgres"
+PASSWORD = "xxxx"
+TARGET_DB = "DWH"
+SCHEMA_NAME = "transformation"
+
+
+def create_schema():
+    conn = psycopg.connect(
+        host=HOST,
+        port=PORT,
+        dbname=TARGET_DB,
+        user=USER,
+        password=PASSWORD
+    )
+    conn.autocommit = True
+
+    with conn.cursor() as cur:
+        cur.execute(
+            sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(SCHEMA_NAME))
+        )
+        print(f"Schema '{SCHEMA_NAME}' created successfully")
+
+    conn.close()
+
+
+def create_tables():
+    conn = psycopg.connect(
+        host=HOST,
+        port=PORT,
+        dbname=TARGET_DB,
+        user=USER,
+        password=PASSWORD
+    )
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(SCHEMA_NAME))
+            )
+            cur.execute(
+                sql.SQL("SET search_path TO {}").format(sql.Identifier(SCHEMA_NAME))
+            )
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS transformation.erp_cust_az12 (
+                    cid VARCHAR(50),
+                    bdate VARCHAR(20),
+                    gen VARCHAR(10)
+                );
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS transformation.erp_loc_a101 (
+                    cid VARCHAR(50),
+                    cntry VARCHAR(50)
+                );
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS transformation.erp_px_cat_g1v2 (
+                    id VARCHAR(10),
+                    cat VARCHAR(50),
+                    subcat VARCHAR(75),
+                    maintenance VARCHAR(50)
+                );
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS transformation.crm_cust_info (
+                    cst_id INT,
+                    cst_key VARCHAR(50),
+                    cst_firstname VARCHAR(50),
+                    cst_lastname VARCHAR(50),
+                    cst_marital_status VARCHAR(5),
+                    cst_gndr VARCHAR(5),
+                    cst_create_date VARCHAR(50)
+                );
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS transformation.crm_prd_info (
+                    prd_id VARCHAR(5),
+                    prd_key VARCHAR(50),
+                    prd_nm VARCHAR(100),
+                    prd_cost VARCHAR(5),
+                    prd_line VARCHAR(5),
+                    prd_start_dt VARCHAR(20),
+                    prd_end_dt VARCHAR(20)
+                );
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS transformation.crm_sales_details (
+                    sls_ord_num VARCHAR(50),
+                    sls_prd_key VARCHAR(50),
+                    sls_cust_id VARCHAR(50),
+                    sls_order_dt VARCHAR(50),
+                    sls_ship_dt VARCHAR(50),
+                    sls_due_dt VARCHAR(50),
+                    sls_sales VARCHAR(50),
+                    sls_quantity VARCHAR(50),
+                    sls_price VARCHAR(20)
+                );
+            """)
+
+        conn.commit()
+        print(f"All 6 tables created successfully in schema '{SCHEMA_NAME}'")
+
+    except Exception as e:
+        conn.rollback()
+        print("Error while creating tables:")
+        print(e)
+
+    finally:
+        conn.close()
+
+
+def main():
+    create_schema()
+    create_tables()
+
+
+if __name__ == "__main__":
+    main()
