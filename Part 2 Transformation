@@ -1,0 +1,229 @@
+import psycopg
+
+HOST = "localhost"
+PORT = 2005
+USER = "postgres"
+PASSWORD = "xxxx"
+TARGET_DB = "DWH"
+
+
+def transform_crm_prd_info():
+    conn = psycopg.connect(
+        host=HOST,
+        port=PORT,
+        dbname=TARGET_DB,
+        user=USER,
+        password=PASSWORD
+    )
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM transformation.crm_prd_info;")
+
+            cur.execute("""
+                INSERT INTO transformation.crm_prd_info (
+                    prd_id,
+                    prd_key,
+                    prd_nm,
+                    prd_cost,
+                    prd_line,
+                    prd_start_dt,
+                    prd_end_dt
+                )
+                SELECT
+                    prd_id::text,
+                    prd_key,
+                    prd_nm,
+                    prd_cost::text,
+                    prd_line,
+                    prd_start_dt::text,
+                    prd_end_dt::text
+                FROM ingestion.crm_prd_info;
+            """)
+
+        conn.commit()
+        print("crm_prd_info transformed successfully")
+
+    except Exception as e:
+        conn.rollback()
+        print("Error while transforming crm_prd_info:")
+        print(e)
+
+    finally:
+        conn.close()
+
+
+def transform_crm_sales_details():
+    conn = psycopg.connect(
+        host=HOST,
+        port=PORT,
+        dbname=TARGET_DB,
+        user=USER,
+        password=PASSWORD
+    )
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM transformation.crm_sales_details;")
+
+            cur.execute("""
+                INSERT INTO transformation.crm_sales_details (
+                    sls_ord_num,
+                    sls_prd_key,
+                    sls_cust_id,
+                    sls_order_dt,
+                    sls_ship_dt,
+                    sls_due_dt,
+                    sls_sales,
+                    sls_quantity,
+                    sls_price
+                )
+                SELECT
+                    sls_ord_num,
+                    sls_prd_key,
+                    sls_cust_id::text,
+                    sls_order_dt,
+                    sls_ship_dt,
+                    sls_due_dt,
+                    sls_sales::text,
+                    sls_quantity::text,
+                    sls_price::text
+                FROM ingestion.crm_sales_details;
+            """)
+
+        conn.commit()
+        print("crm_sales_details transformed successfully")
+
+    except Exception as e:
+        conn.rollback()
+        print("Error while transforming crm_sales_details:")
+        print(e)
+
+    finally:
+        conn.close()
+
+
+def transform_erp_cust_az12():
+    conn = psycopg.connect(
+        host=HOST,
+        port=PORT,
+        dbname=TARGET_DB,
+        user=USER,
+        password=PASSWORD
+    )
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM transformation.erp_cust_az12;")
+
+            cur.execute("""
+                INSERT INTO transformation.erp_cust_az12 (
+                    cid,
+                    bdate,
+                    gen
+                )
+                SELECT
+                    cid,
+                    bdate,
+                    gen
+                FROM ingestion.erp_cust_az12;
+            """)
+
+        conn.commit()
+        print("erp_cust_az12 transformed successfully")
+
+    except Exception as e:
+        conn.rollback()
+        print("Error while transforming erp_cust_az12:")
+        print(e)
+
+    finally:
+        conn.close()
+
+
+def transform_erp_loc_a101():
+    conn = psycopg.connect(
+        host=HOST,
+        port=PORT,
+        dbname=TARGET_DB,
+        user=USER,
+        password=PASSWORD
+    )
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM transformation.erp_loc_a101;")
+
+            cur.execute("""
+                INSERT INTO transformation.erp_loc_a101 (
+                    cid,
+                    cntry
+                )
+                SELECT
+                    cid,
+                    cntry
+                FROM ingestion.erp_loc_a101;
+            """)
+
+        conn.commit()
+        print("erp_loc_a101 transformed successfully")
+
+    except Exception as e:
+        conn.rollback()
+        print("Error while transforming erp_loc_a101:")
+        print(e)
+
+    finally:
+        conn.close()
+
+
+def transform_erp_px_cat_g1v2():
+    conn = psycopg.connect(
+        host=HOST,
+        port=PORT,
+        dbname=TARGET_DB,
+        user=USER,
+        password=PASSWORD
+    )
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM transformation.erp_px_cat_g1v2;")
+
+            cur.execute("""
+                INSERT INTO transformation.erp_px_cat_g1v2 (
+                    id,
+                    cat,
+                    subcat,
+                    maintenance
+                )
+                SELECT
+                    id,
+                    cat,
+                    subcat,
+                    maintenance
+                FROM ingestion.erp_px_cat_g1v2;
+            """)
+
+        conn.commit()
+        print("erp_px_cat_g1v2 transformed successfully")
+
+    except Exception as e:
+        conn.rollback()
+        print("Error while transforming erp_px_cat_g1v2:")
+        print(e)
+
+    finally:
+        conn.close()
+
+
+def main():
+    transform_crm_prd_info()
+    transform_crm_sales_details()
+    transform_erp_cust_az12()
+    transform_erp_loc_a101()
+    transform_erp_px_cat_g1v2()
+
+
+if __name__ == "__main__":
+    main()
