@@ -1,0 +1,441 @@
+import psycopg
+from psycopg import sql
+
+HOST = "localhost"
+PORT = 2005
+USER = "postgres"
+PASSWORD = "xxxx"
+TARGET_DB = "DWH"
+SCHEMA_NAME = "transformation"
+
+
+def create_schema():
+    conn = psycopg.connect(
+        host=HOST,
+        port=PORT,
+        dbname=TARGET_DB,
+        user=USER,
+        password=PASSWORD
+    )
+    conn.autocommit = True
+
+    with conn.cursor() as cur:
+        cur.execute(
+            sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(SCHEMA_NAME))
+        )
+        print(f"Schema '{SCHEMA_NAME}' created successfully")
+
+    conn.close()
+
+
+def create_tables():
+    conn = psycopg.connect(
+        host=HOST,
+        port=PORT,
+        dbname=TARGET_DB,
+        user=USER,
+        password=PASSWORD
+    )
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(SCHEMA_NAME))
+            )
+            cur.execute(
+                sql.SQL("SET search_path TO {}").format(sql.Identifier(SCHEMA_NAME))
+            )
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS transformation.erp_cust_az12 (
+                    cid VARCHAR(50),
+                    bdate VARCHAR(20),
+                    gen VARCHAR(20)
+                );
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS transformation.erp_loc_a101 (
+                    cid VARCHAR(50),
+                    cntry VARCHAR(100)
+                );
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS transformation.erp_px_cat_g1v2 (
+                    id VARCHAR(10),
+                    cat VARCHAR(50),
+                    subcat VARCHAR(75),
+                    maintenance VARCHAR(50)
+                );
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS transformation.crm_cust_info (
+                    cst_id INT,
+                    cst_key VARCHAR(50),
+                    cst_firstname VARCHAR(50),
+                    cst_lastname VARCHAR(50),
+                    cst_marital_status VARCHAR(20),
+                    cst_gndr VARCHAR(10),
+                    cst_create_date VARCHAR(50)
+                );
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS transformation.crm_prd_info (
+                    prd_id VARCHAR(10),
+                    prd_key VARCHAR(50),
+                    prd_nm VARCHAR(100),
+                    prd_cost VARCHAR(20),
+                    prd_line VARCHAR(20),
+                    prd_start_dt VARCHAR(20),
+                    prd_end_dt VARCHAR(20)
+                );
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS transformation.crm_sales_details (
+                    sls_ord_num VARCHAR(50),
+                    sls_prd_key VARCHAR(50),
+                    sls_cust_id VARCHAR(50),
+                    sls_order_dt VARCHAR(50),
+                    sls_ship_dt VARCHAR(50),
+                    sls_due_dt VARCHAR(50),
+                    sls_sales VARCHAR(50),
+                    sls_quantity VARCHAR(50),
+                    sls_price VARCHAR(20)
+                );
+            """)
+
+        conn.commit()
+        print(f"All 6 tables created successfully in schema '{SCHEMA_NAME}'")
+
+    except Exception as e:
+        conn.rollback()
+        print("Error while creating tables:")
+        print(e)
+
+    finally:
+        conn.close()
+
+
+def transform_crm_cust_info():
+    conn = psycopg.connect(
+        host=HOST,
+        port=PORT,
+        dbname=TARGET_DB,
+        user=USER,
+        password=PASSWORD
+    )
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute("TRUNCATE TABLE transformation.crm_cust_info;")
+
+            cur.execute("""
+                INSERT INTO transformation.crm_cust_info (
+                    cst_id,
+                    cst_key,
+                    cst_firstname,
+                    cst_lastname,
+                    cst_marital_status,
+                    cst_gndr,
+                    cst_create_date
+                )
+                SELECT
+                    cst_id,
+                    TRIM(cst_key),
+                    NULLIF(TRIM(cst_firstname), ''),
+                    NULLIF(TRIM(cst_lastname), ''),
+                    CASE
+                        WHEN TRIM(UPPER(cst_marital_status)) IN ('S', 'SINGLE') THEN 'Single'
+                        WHEN TRIM(UPPER(cst_marital_status)) IN ('M', 'MARRIED') THEN 'Married'
+                        WHEN TRIM(cst_marital_status) = '' OR cst_marital_status IS NULL THEN 'N/A'
+                        ELSE TRIM(cst_marital_status)
+                    END,
+                    CASE
+                        WHEN TRIM(UPPER(cst_gndr)) IN ('M', 'MALE') THEN 'Male'
+                        WHEN TRIM(UPPER(cst_gndr)) IN ('F', 'FEMALE') THEN 'Female'
+                        WHEN TRIM(cst_gndr) = '' OR cst_gndr IS NULL THEN 'N/A'
+                        ELSE TRIM(cst_gndr)
+                    END,
+                    cst_create_date::text
+                FROM ingestion.crm_cust_info;
+            """)
+
+        conn.commit()
+        print("crm_cust_info transformed successfully")
+
+    except Exception as e:
+        conn.rollback()
+        print("Error while transforming crm_cust_info:")
+        print(e)
+
+    finally:
+        conn.close()
+
+
+def transform_crm_prd_info():
+    conn = psycopg.connect(
+        host=HOST,
+        port=PORT,
+        dbname=TARGET_DB,
+        user=USER,
+        password=PASSWORD
+    )
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute("TRUNCATE TABLE transformation.crm_prd_info;")
+
+            cur.execute("""
+                INSERT INTO transformation.crm_prd_info (
+                    prd_id,
+                    prd_key,
+                    prd_nm,
+                    prd_cost,
+                    prd_line,
+                    prd_start_dt,
+                    prd_end_dt
+                )
+                SELECT
+                    prd_id::text,
+                    TRIM(prd_key),
+                    NULLIF(TRIM(prd_nm), ''),
+                    prd_cost::text,
+                    UPPER(TRIM(prd_line)),
+                    prd_start_dt::text,
+                    CASE
+                        WHEN prd_end_dt IS NULL THEN NULL
+                        ELSE prd_end_dt::text
+                    END
+                FROM ingestion.crm_prd_info;
+            """)
+
+        conn.commit()
+        print("crm_prd_info transformed successfully")
+
+    except Exception as e:
+        conn.rollback()
+        print("Error while transforming crm_prd_info:")
+        print(e)
+
+    finally:
+        conn.close()
+
+
+def transform_crm_sales_details():
+    conn = psycopg.connect(
+        host=HOST,
+        port=PORT,
+        dbname=TARGET_DB,
+        user=USER,
+        password=PASSWORD
+    )
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute("TRUNCATE TABLE transformation.crm_sales_details;")
+
+            cur.execute("""
+                INSERT INTO transformation.crm_sales_details (
+                    sls_ord_num,
+                    sls_prd_key,
+                    sls_cust_id,
+                    sls_order_dt,
+                    sls_ship_dt,
+                    sls_due_dt,
+                    sls_sales,
+                    sls_quantity,
+                    sls_price
+                )
+                SELECT
+                    TRIM(sls_ord_num),
+                    TRIM(sls_prd_key),
+                    sls_cust_id::text,
+                    CASE
+                        WHEN sls_ship_dt IS NOT NULL AND sls_order_dt > sls_ship_dt THEN NULL
+                        ELSE sls_order_dt::text
+                    END,
+                    sls_ship_dt::text,
+                    CASE
+                        WHEN sls_due_dt IS NOT NULL AND sls_ship_dt IS NOT NULL AND sls_due_dt < sls_ship_dt THEN NULL
+                        ELSE sls_due_dt::text
+                    END,
+                    CASE
+                        WHEN (sls_sales IS NULL OR sls_sales <= 0) AND sls_price IS NOT NULL AND sls_price > 0
+                            THEN sls_price::text
+                        ELSE sls_sales::text
+                    END,
+                    CASE
+                        WHEN sls_quantity IS NULL OR sls_quantity < 0 THEN NULL
+                        ELSE sls_quantity::text
+                    END,
+                    CASE
+                        WHEN (sls_price IS NULL OR sls_price <= 0) AND sls_sales IS NOT NULL AND sls_sales > 0
+                            THEN sls_sales::text
+                        ELSE sls_price::text
+                    END
+                FROM ingestion.crm_sales_details;
+            """)
+
+        conn.commit()
+        print("crm_sales_details transformed successfully")
+
+    except Exception as e:
+        conn.rollback()
+        print("Error while transforming crm_sales_details:")
+        print(e)
+
+    finally:
+        conn.close()
+
+
+def transform_erp_cust_az12():
+    conn = psycopg.connect(
+        host=HOST,
+        port=PORT,
+        dbname=TARGET_DB,
+        user=USER,
+        password=PASSWORD
+    )
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute("TRUNCATE TABLE transformation.erp_cust_az12;")
+
+            cur.execute("""
+                INSERT INTO transformation.erp_cust_az12 (
+                    cid,
+                    bdate,
+                    gen
+                )
+                SELECT
+                    TRIM(cid),
+                    CASE
+                        WHEN bdate ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                             AND TO_DATE(bdate, 'YYYY-MM-DD') > CURRENT_DATE THEN NULL
+                        ELSE bdate
+                    END,
+                    CASE
+                        WHEN TRIM(UPPER(gen)) = 'M' THEN 'Male'
+                        WHEN TRIM(UPPER(gen)) = 'F' THEN 'Female'
+                        WHEN TRIM(gen) = '' OR gen IS NULL THEN 'N/A'
+                        ELSE TRIM(gen)
+                    END
+                FROM ingestion.erp_cust_az12;
+            """)
+
+        conn.commit()
+        print("erp_cust_az12 transformed successfully")
+
+    except Exception as e:
+        conn.rollback()
+        print("Error while transforming erp_cust_az12:")
+        print(e)
+
+    finally:
+        conn.close()
+
+
+def transform_erp_loc_a101():
+    conn = psycopg.connect(
+        host=HOST,
+        port=PORT,
+        dbname=TARGET_DB,
+        user=USER,
+        password=PASSWORD
+    )
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute("TRUNCATE TABLE transformation.erp_loc_a101;")
+
+            cur.execute("""
+                INSERT INTO transformation.erp_loc_a101 (
+                    cid,
+                    cntry
+                )
+                SELECT
+                    TRIM(cid),
+                    CASE
+                        WHEN TRIM(UPPER(cntry)) = 'DE' THEN 'Germany'
+                        WHEN TRIM(UPPER(cntry)) IN ('US', 'USA') THEN 'United States of America'
+                        WHEN TRIM(cntry) = '' OR cntry IS NULL THEN 'N/A'
+                        ELSE TRIM(cntry)
+                    END
+                FROM ingestion.erp_loc_a101;
+            """)
+
+        conn.commit()
+        print("erp_loc_a101 transformed successfully")
+
+    except Exception as e:
+        conn.rollback()
+        print("Error while transforming erp_loc_a101:")
+        print(e)
+
+    finally:
+        conn.close()
+
+
+def transform_erp_px_cat_g1v2():
+    conn = psycopg.connect(
+        host=HOST,
+        port=PORT,
+        dbname=TARGET_DB,
+        user=USER,
+        password=PASSWORD
+    )
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute("TRUNCATE TABLE transformation.erp_px_cat_g1v2;")
+
+            cur.execute("""
+                INSERT INTO transformation.erp_px_cat_g1v2 (
+                    id,
+                    cat,
+                    subcat,
+                    maintenance
+                )
+                SELECT
+                    TRIM(id),
+                    NULLIF(TRIM(cat), ''),
+                    NULLIF(TRIM(subcat), ''),
+                    CASE
+                        WHEN TRIM(UPPER(maintenance)) = 'YES' THEN '1'
+                        WHEN TRIM(UPPER(maintenance)) = 'NO' THEN '0'
+                        WHEN TRIM(maintenance) = '' OR maintenance IS NULL THEN NULL
+                        ELSE TRIM(maintenance)
+                    END
+                FROM ingestion.erp_px_cat_g1v2;
+            """)
+
+        conn.commit()
+        print("erp_px_cat_g1v2 transformed successfully")
+
+    except Exception as e:
+        conn.rollback()
+        print("Error while transforming erp_px_cat_g1v2:")
+        print(e)
+
+    finally:
+        conn.close()
+
+
+def main():
+    create_schema()
+    create_tables()
+    transform_crm_cust_info()
+    transform_crm_prd_info()
+    transform_crm_sales_details()
+    transform_erp_cust_az12()
+    transform_erp_loc_a101()
+    transform_erp_px_cat_g1v2()
+    print("All transformation tables loaded successfully")
+
+
+if __name__ == "__main__":
+    main()
